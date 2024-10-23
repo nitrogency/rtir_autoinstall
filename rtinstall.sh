@@ -26,9 +26,8 @@ rt_install() {
     cd rt
 
     ./configure
-    echo "Configure"
     make testdeps
-    sudo cpan install HTML::FormatText HTML::TreeBuilder HTML::FormatText::WithLinks HTML::FormatText::WithLinks::AndTables DBD::mysql LWP::Protocol::https Parallel::ForkManager Parallel:Prefork CPAN::DistnameInfo App::FatPacker 
+    sudo cpan install -fi HTML::FormatText HTML::TreeBuilder HTML::FormatText::WithLinks HTML::FormatText::WithLinks::AndTables DBD::mysql LWP::Protocol::https Parallel::ForkManager Parallel:Prefork CPAN::DistnameInfo App::FatPacker 
     sudo cpan install -fi Module::Pluggable Convert::Color
     PERL_MM_OPT="skip-test" PERL_MM_USE_DEFAULT=1 | sudo make fixdeps
     make testdeps
