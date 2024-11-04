@@ -1,7 +1,5 @@
 #!/bin/bash
 
-PORT=8080
-
 setup_dependencies() {
     echo "Updating system packages & installing dependencies"
     sudo apt update -y && sudo apt upgrade -y
@@ -66,7 +64,47 @@ rtir_install() {
 
 start() {
 
-    sudo tee /etc/systemd/system/rt-server.service > /dev/null <<EOL
+sudo apt install spawn-fcgi
+    
+cat << 'EOF' > /etc/nginx/sites-available/default
+server {
+        listen 80;
+        server_name 127.0.0.1;
+        access_log  /var/log/nginx/access.log;
+
+        location / {
+            client_max_body_size 100M;
+
+            fastcgi_param  QUERY_STRING       $query_string;
+            fastcgi_param  REQUEST_METHOD     $request_method;
+            fastcgi_param  CONTENT_TYPE       $content_type;
+            fastcgi_param  CONTENT_LENGTH     $content_length;
+
+            fastcgi_param  SCRIPT_NAME        "";
+            fastcgi_param  PATH_INFO          $uri;
+            fastcgi_param  REQUEST_URI        $request_uri;
+            fastcgi_param  DOCUMENT_URI       $document_uri;
+            fastcgi_param  DOCUMENT_ROOT      $document_root;
+            fastcgi_param  SERVER_PROTOCOL    $server_protocol;
+
+            fastcgi_param  GATEWAY_INTERFACE  CGI/1.1;
+            fastcgi_param  SERVER_SOFTWARE    nginx/$nginx_version;
+
+            fastcgi_param  REMOTE_ADDR        $remote_addr;
+            fastcgi_param  REMOTE_PORT        $remote_port;
+            fastcgi_param  SERVER_ADDR        $server_addr;
+            fastcgi_param  SERVER_PORT        $server_port;
+            fastcgi_param  SERVER_NAME        $server_name;
+            fastcgi_pass 127.0.0.1:9000;
+        }
+    }
+
+EOF
+
+nginx -t
+systemctl reload nginx
+
+sudo tee /etc/systemd/system/rt-server.service > /dev/null <<EOF
 [Unit]
 Description=RT Server
 After=network.target
@@ -74,16 +112,39 @@ After=network.target
 [Service]
 Type=simple
 User=www-data  
-ExecStart=/opt/rt5/sbin/rt-server --port $PORT
+ExecStart=/usr/bin/spawn-fcgi -n -f /opt/rt5/sbin/rt-server.fcgi -p 9000
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
-EOL
+EOF
 
-    sudo systemctl enable rt-server
-    sudo systemctl start rt-server
+sudo systemctl daemon-reload
+sudo systemctl enable rt-server
+sudo systemctl start rt-server
 
 }
 
-setup_dependencies && rt_install && rtir_install && start
+config_db() {
+
+PASSWORD=$(openssl rand -base64 32)
+
+sudo mysql_secure_installation <<EOF
+N
+N
+Y
+Y
+Y
+Y
+EOF
+
+sudo mysql -u root -e "ALTER USER 'rt_user'@'localhost' IDENTIFIED BY '$PASSWORD';"
+
+echo "Set(\$DatabasePassword, \"$PASSWORD\");" | tee -a /opt/rt5/etc/RT_SiteConfig.pm > /dev/null
+echo "Set(\$AutoLogoff, 60);" | tee -a /opt/rt5/etc/RT_SiteConfig.pm > /dev/null
+echo "Set(\$WebSameSiteCookies, \"Secure\");" | tee -a /opt/rt5/etc/RT_SiteConfig.pm > /dev/null
+echo "Set(\$MinimumPasswordLength, 8);" | tee -a /opt/rt5/etc/RT_SiteConfig.pm > /dev/null
+}
+
+
+config_db && start
