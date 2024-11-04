@@ -147,4 +147,4 @@ echo "Set(\$MinimumPasswordLength, 8);" | tee -a /opt/rt5/etc/RT_SiteConfig.pm >
 }
 
 
-config_db && start
+setup_dependencies && rt_install && rtir_install && config_db && start
